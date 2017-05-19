@@ -3,9 +3,8 @@
  *  Author: Primož Hrovat
  *  
  */
-#include "FastLED.h"
+#include <FastLED.h>
 #include <PinChangeInt.h>
-#include <PinChangeIntConfig.h>
 
 /***** DEFINED PINS *****/
 #define TOUCH_SENSOR_1 2
@@ -17,13 +16,14 @@
 #define RELAY_SWITCH_3 8
 #define RELAY_SWITCH_4 9
 
-#define NUM_LEDS 120
+#define NUM_LEDS 150
 #define DATA_PIN 10
 
 /***** CONSTANTS *****/
-CRGB leds[NUM_LEDS];
+CRGBArray<NUM_LEDS> leds;
 uint8_t gHue = 0;
-uint8_t gHueDelta = 2;
+uint8_t gHueDelta = (uint8_t) round(255 / NUM_LEDS);
+uint8_t global = 0;
 int relay_on = 0;
 
 /***** FUNCTION PROTOTYPES *****/
@@ -46,14 +46,21 @@ void setup() {
   // debuging
   Serial.begin(9600);
 
-  setupTouch();
+  //setupTouch();
   setupRelays();
   setupLED();
+
+  digitalWrite(RELAY_SWITCH_4, LOW);
 }
 
 void loop() {
-  
-  simple();
+  avadaKedavra(400, 90, 0, 150, 220, 20, 500);
+  delay(500);
+  bounce(5, 800);
+  delay(500);
+  rainbow(200);
+  leds.fadeToBlackBy(255);
+  delay(500);
 }
 
 /***** SETUP *****/
@@ -79,21 +86,143 @@ void setupRelays() {
 
 void setupLED() {
   // setup leds
-  FastLED.addLeds<NEOPIXEL, DATA_PIN>(leds, NUM_LEDS); 
+  delay(3000);
+  FastLED.addLeds<WS2812B, DATA_PIN, GRB>(leds, NUM_LEDS).setCorrection(TypicalSMD5050);
 }
 
 /***** LED ANIMATIONS *****/
 
-void simple() {
-  // simple animation
-  for (int dot = 0; dot < NUM_LEDS; dot++) {
-    leds[dot].setHSV(gHue, 150, 150);
+void bounce(int numLeds, int del) {
+  for (int dot = 0; dot < NUM_LEDS - numLeds + 1; dot++) {
+    leds(dot, dot + numLeds - 1) = CHSV(gHue, 200, 150);
     FastLED.show();
+    leds(dot, dot + numLeds - 1) = CHSV(gHue, 200, 0);
     gHue += gHueDelta;
-    delay(20);
+    delay(del/(dot+1));
+  }
+  // bounce back
+  for (int i = 1; i < NUM_LEDS-numLeds+1; i++) {
+    int dot = NUM_LEDS - i;
+    leds(dot - numLeds, dot - 1) = CHSV(gHue, 200, 150);
+    FastLED.show();
+    leds(dot - numLeds, dot - 1) = CHSV(gHue, 200, 0);
+    gHue -= gHueDelta;
+    delay(del/(dot));
   }
 }
 
+void rainbow(int del) {
+  static uint8_t hue = 0;
+  for (int i = 0; i < del; i++) {
+    leds(0,NUM_LEDS/2 - 1).fill_rainbow(hue++); 
+    leds(NUM_LEDS/2, NUM_LEDS-1) = leds(NUM_LEDS/2-1,0);
+    FastLED.delay(del / 2);
+  }
+}
+
+/* Voldemort vs. Harry
+ *  args: nRounds = length of animation
+ *  volC: Voldemort's color
+ *  harryC: Harry's color
+ *  winC1: Voldemort's win color
+ *  winC2: Harry's win color
+ *  del: speed of animation
+ *  pause: 
+ */
+void avadaKedavra(int nRounds, uint8_t volC, uint8_t harryC, uint8_t winC1, uint8_t winC2, int del, int pause) {;
+
+  for (int dot = 0; dot < NUM_LEDS/2; dot++) {
+    leds[dot].setHSV(volC, 255, 150);
+    leds[NUM_LEDS-dot - 1].setHSV(harryC, 255, 150);
+    FastLED.show();
+    FastLED.delay(del);
+  }
+  
+  int half = NUM_LEDS / 2;
+  
+  for (int i = 0; i < nRounds; i++) {
+    for (int a = half - 5; a <= half + 4; a++) {
+      leds[a] = CHSV( random8(),200,100);
+    }
+    FastLED.show();
+    if (random8() > 125){
+      leds[half + 4] = CHSV(harryC, 255, 150);
+      half--;
+    }
+    else {
+      leds[half - 5] = CHSV(volC, 255, 150);
+      half++;
+    }
+    FastLED.delay(del);
+  }
+
+// Harry WINS
+  if (half < NUM_LEDS / 2) {
+    while (half > 4) {    
+      for (int i = half - 5; i <= half + 4; i++) {
+        leds[i] = CHSV(random8(), 255, 150);
+      }
+      leds[half + 4] = CHSV(harryC, 255, 150);
+      FastLED.show();
+      half--;
+      FastLED.delay(del);
+    }
+
+    for (int i = 9; i >= 0; i--) {
+      leds[i] = CHSV(harryC, 255, 150);
+      FastLED.show();
+      FastLED.delay(del);
+    }
+
+    leds.fadeToBlackBy(255);
+    FastLED.delay(pause);
+    
+    for (int i = 4; i < NUM_LEDS - 5; i++) {
+      leds(i - 4, i + 5) = CHSV(winC1, 255, 50);
+      FastLED.show();
+      FastLED.delay(del);
+    }
+    
+// Harry LOSES        
+  } else {
+    while (half < NUM_LEDS - 4) {
+      for (int a = half - 5; a <= half + 4; a++)
+        leds[a] = CHSV(random8(), 255, 100);
+        
+      leds[half - 5] = CHSV(volC, 255, 150);
+      FastLED.show();
+      half++;
+      FastLED.delay(del);
+    }
+
+    for (int i = NUM_LEDS - 10; i < NUM_LEDS; i++) {
+      leds[i] = CHSV(volC, 255, 150);
+      FastLED.show();
+      FastLED.delay(del);
+    }
+
+    leds.fadeToBlackBy(255);
+    FastLED.delay(pause);
+    
+    for (int i = NUM_LEDS - 1; i >= 4; i--) {
+      leds(i - 4, i + 5) = CHSV(winC2, 255, 50);
+      FastLED.show();
+      FastLED.delay(del);
+    }
+  }
+/*  
+  for (uint8_t sat = 20; sat < 255; sat++) {
+      leds(half-5, half+4) = CHSV(40, sat, 150);
+      FastLED.show();   
+      delay(10);
+  }
+*/
+  FastLED.delay(pause * 2);
+  leds.fadeToBlackBy(255);
+  FastLED.delay(pause * 4);
+}
+
+/***** RELAY ON function *****/
 void setRelays(byte touch_sensor) {
   Serial.println(touch_sensor);
   switch (touch_sensor){
