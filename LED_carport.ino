@@ -221,6 +221,10 @@ void avadaKedavra(int nRounds, uint8_t volC, uint8_t harryC, uint8_t winC1, uint
   leds.fadeToBlackBy(255);
   FastLED.delay(pause * 4);
 }
+void explosion() {
+
+  
+}
 
 /***** RELAY ON function *****/
 void setRelays(byte touch_sensor) {
