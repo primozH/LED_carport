@@ -13,11 +13,17 @@
 #define TOUCH_SENSOR_4 5
 #define RELAY_SWITCH_1 6
 #define RELAY_SWITCH_2 7
-#define RELAY_SWITCH_3 8
-#define RELAY_SWITCH_4 9
 
-#define NUM_LEDS 150
+#define TRIGPIN 8
+#define ECHOPIN 9
+
+#define NUM_LEDS 88
 #define DATA_PIN 10
+
+/***** OPERATION MODE *****/
+#define AUTO_MODE 100
+#define ANIMATION_MODE 101
+#define AMBILIGHT_MODE 102
 
 /***** CONSTANTS *****/
 CRGBArray<NUM_LEDS> leds;
@@ -25,14 +31,18 @@ uint8_t gHue = 0;
 uint8_t gHueDelta = (uint8_t) round(255 / NUM_LEDS);
 uint8_t global = 0;
 int relay_on = 0;
+byte omode = 0;
 
 /***** FUNCTION PROTOTYPES *****/
 /***** SETUP *****/
 void setupTouch();
 void setupRelays();
 void setupLED();
+void setupDistSensor();
 /***** LED ANIMATIONS *****/
-void simple();
+void bounce();
+void avadaKedavra();
+void rainbow();
 /***** PRACTICAL FUNCTIONS *****/
 void setRelays(byte touch_sensor);
 /***** INTERRUPT HANDLERS *****/
@@ -41,28 +51,25 @@ void switch_interrupt2();
 void switch_interrupt3();
 void switch_interrupt4();
 
+/***** MAIN PROGRAM *****/
 void setup() {
 
   // debuging
   Serial.begin(9600);
 
-  //setupTouch();
+  setupTouch();
   setupRelays();
+  setupDistSensor();
   setupLED();
 
-  digitalWrite(RELAY_SWITCH_4, LOW);
+  ambimode();
 }
 
 void loop() {
-  avadaKedavra(400, 90, 0, 150, 220, 20, 500);
-  delay(500);
-  bounce(5, 800);
-  delay(500);
-  rainbow(200);
-  leds.fadeToBlackBy(255);
-  delay(500);
+  
 }
 
+/***** FUNCTION DEFINITIONS *****/
 /***** SETUP *****/
 void setupTouch() {
   // define input pins
@@ -72,22 +79,23 @@ void setupTouch() {
   attachInterrupt(digitalPinToInterrupt(TOUCH_SENSOR_2), switch_interrupt2, RISING);
   pinMode(TOUCH_SENSOR_3, INPUT);
   PCintPort::attachInterrupt(TOUCH_SENSOR_3, switch_interrupt3, RISING);
-  pinMode(TOUCH_SENSOR_4, INPUT);
-  PCintPort::attachInterrupt(TOUCH_SENSOR_4, switch_interrupt4, RISING);
 }
 
 void setupRelays() {
   // define relay pins
   pinMode(RELAY_SWITCH_1, OUTPUT);
-  pinMode(RELAY_SWITCH_2, OUTPUT);
-  pinMode(RELAY_SWITCH_3, OUTPUT);
-  pinMode(RELAY_SWITCH_4, OUTPUT); 
+  pinMode(RELAY_SWITCH_2, OUTPUT); 
 }
 
 void setupLED() {
   // setup leds
   delay(3000);
   FastLED.addLeds<WS2812B, DATA_PIN, GRB>(leds, NUM_LEDS).setCorrection(TypicalSMD5050);
+}
+
+void setupDistSensor() {
+  pinMode(TRIGPIN, OUTPUT);
+  pinMode(ECHOPIN, INPUT);
 }
 
 /***** LED ANIMATIONS *****/
@@ -221,88 +229,111 @@ void avadaKedavra(int nRounds, uint8_t volC, uint8_t harryC, uint8_t winC1, uint
   leds.fadeToBlackBy(255);
   FastLED.delay(pause * 4);
 }
-void explosion() {
 
-  
-}
 
-/***** RELAY ON function *****/
-void setRelays(byte touch_sensor) {
-  Serial.println(touch_sensor);
-  switch (touch_sensor){
-    case TOUCH_SENSOR_1:
+/***** RELAY ON *****/
+void setRelays(byte mode) {
+  Serial.println(mode);
+  switch (mode){
+    // all relays OFF //
+    case 0:
+      digitalWrite(RELAY_SWITCH_1, HIGH);
+      digitalWrite(RELAY_SWITCH_2, HIGH);
+      break;
+    // Relay 1 & 2 ON
+    case 1:
       digitalWrite(RELAY_SWITCH_1, LOW);
-      digitalWrite(RELAY_SWITCH_2, HIGH);
-      digitalWrite(RELAY_SWITCH_3, HIGH);
-      digitalWrite(RELAY_SWITCH_4, HIGH);
-      break;
-    case TOUCH_SENSOR_2:
-      digitalWrite(RELAY_SWITCH_1, HIGH);
       digitalWrite(RELAY_SWITCH_2, LOW);
-      digitalWrite(RELAY_SWITCH_3, HIGH);
-      digitalWrite(RELAY_SWITCH_4, HIGH);
       break;
-    case TOUCH_SENSOR_3:
-      digitalWrite(RELAY_SWITCH_1, HIGH);
-      digitalWrite(RELAY_SWITCH_2, HIGH);
-      digitalWrite(RELAY_SWITCH_3, LOW);
-      digitalWrite(RELAY_SWITCH_4, HIGH);
-      break;
-    case TOUCH_SENSOR_4:
-      digitalWrite(RELAY_SWITCH_1, HIGH);
-      digitalWrite(RELAY_SWITCH_2, HIGH);
-      digitalWrite(RELAY_SWITCH_3, HIGH);
-      digitalWrite(RELAY_SWITCH_4, LOW);
-    default:
-      digitalWrite(RELAY_SWITCH_1, HIGH);
-      digitalWrite(RELAY_SWITCH_2, HIGH);
-      digitalWrite(RELAY_SWITCH_3, HIGH);
-      digitalWrite(RELAY_SWITCH_4, HIGH);
   }
 }
 
-// interrupt handlers
+// reads and return distance
+int measureDistance() {
+  digitalWrite(TRIGPIN, LOW);
+  delayMicroseconds(5);
+  digitalWrite(TRIGPIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIGPIN, LOW);
+  int pulseT = pulseIn(ECHOPIN, HIGH, 38000);
+  if (pulseT == 0)
+    return -1;
+  int distance = pulseT/58;
+  return distance;
+}
 
+/***** OPERATION MODES *****/
+void automode() {
+  delay(100);
+  omode = AUTO_MODE;
+  while(true) {
+    delay(5000);
+    int dist = measureDistance();
+    if (dist > 150) {
+      for (int i = 0; i < 10; i++) {
+        bounce(10, 1000);
+        delay(500);
+      }
+      // white leds for 5 minutes
+      leds(0, NUM_LEDS -1) = CRGB::White;
+      FastLED.show();
+      delay(300000);
+      leds.fadeToBlackBy(40);
+    }
+    
+  }
+}
+
+void animationmode() {
+  delay(100);
+  omode = ANIMATION_MODE;
+  while(true) {
+    bounce(5, 200);
+    delay(400);
+  }
+}
+
+void ambimode() {
+  delay(100);
+  omode = AMBILIGHT_MODE;
+  while(true) {
+    byte color = random8();
+    leds(0, NUM_LEDS-1) = CHSV(color, 255, 150);
+    FastLED.show();
+    delay(120000);
+  }
+}
+
+/***** INTERRUPTS HANDLERS *****/
 void switch_interrupt1() {
-  if (relay_on != RELAY_SWITCH_1) {
-    setRelays(TOUCH_SENSOR_1);
-    relay_on = RELAY_SWITCH_1;
+  if (omode != AUTO_MODE) {
+    setRelays(1);
+    automode();
   }
   else { 
     setRelays(0);
-    relay_on = 0;
+    omode = 0;
   }
 }
 
 void switch_interrupt2() {
-  if (relay_on != RELAY_SWITCH_2) {
-    setRelays(TOUCH_SENSOR_2);
-    relay_on = RELAY_SWITCH_2;
+  if (omode != ANIMATION_MODE) {
+    setRelays(1);
+    animationmode();
   }
   else { 
     setRelays(0);
-    relay_on = 0;
+    omode = 0;
   }
 }
 
 void switch_interrupt3() {
-  if (relay_on != RELAY_SWITCH_3) {
-    setRelays(TOUCH_SENSOR_3);
-    relay_on = RELAY_SWITCH_3;
+  if (omode != AMBILIGHT_MODE) {
+    setRelays(1);
+    ambimode();
   }
   else { 
     setRelays(0);
-    relay_on = 0;
+    omode = 0;
   }
-}
-
-void switch_interrupt4() {
-  if (relay_on != RELAY_SWITCH_4) {
-    setRelays(TOUCH_SENSOR_4);
-    relay_on = RELAY_SWITCH_4;
-  }
-  else { 
-    setRelays(0);
-    relay_on = 0;
-  }  
 }
